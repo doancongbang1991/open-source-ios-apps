@@ -6,9 +6,11 @@ README = 'README.md'
 ARCHIVE = 'ARCHIVE.md'
 ARCHIVE_TAG = 'archive'
 
+APPSTORE = 'APPSTORE.md'
+
 def apps_archived(apps)
   a = apps.select {|a| a['tags'] != nil }.select {|b| b['tags'].include?ARCHIVE_TAG}
-  a.sort_by { |k, v| k['title'] }
+  a.sort_by { |k, v| k['title'].downcase }
 end
 
 def apps_for_cat(apps, id)
@@ -29,7 +31,28 @@ def apps_for_cat(apps, id)
   s.sort_by { |k, v| k['title'].downcase }
 end
 
-def output_apps(apps)
+def app_store_total(j)
+  apps = j['projects']
+  s = apps.select { |x| x['itunes'].nil? }
+
+  count = 1  
+  s.each do |x|
+    tags = x['tags']
+    if tags.nil?
+      t = "#{count} "
+      count = count + 1
+    else
+      unless tags.include? 'archive'
+        t = "#{count} #{tags}"
+        count = count + 1
+      end
+    end
+  end
+
+  count
+end
+
+def output_apps(apps, appstoreonly)
   o = ''
   apps.each do |a|
     name = a['title']
@@ -56,21 +79,26 @@ def output_apps(apps)
     unless itunes.nil?
       t << "[` App Store`](#{itunes}) "
     end
+
+    if appstoreonly
+      next if itunes.nil?
+    end
+
     o << "- #{t} \n"
 
-    o <<  "<details><summary>"
+    o <<  "  <details><summary>"
 
     details = if tags.nil?
-      '`objc` '
+      '<code>objc</code> '
     else
       ''
     end
 
     unless tags.nil?
-      details << '`swift` ' if tags.include? 'swift'
+      details << '<code>swift</code> ' if tags.include? 'swift'
 
       tags.each do |t|
-        details << "`#{t.downcase}` " if t.downcase!='swift'
+        details << "<code>#{t.downcase}</code> " if t.downcase!='swift'
       end
     end
 
@@ -105,22 +133,20 @@ def output_apps(apps)
       details_list.push "License: #{license_display}"
     end
 
-    details = '  '
+    details = "\n\n  "
     details << details_list[0]
     details_list[1..-1].each { |x| details << "<br>  #{x}" }
 
     unless screenshots.nil?
-      details << "\n<div>"
+      details << "\n  <div>"
       screenshots.each_with_index do |s, i|
         details << "<img height='300' alt='#{name} image #{i+1}' src='#{screenshots[i]}'> "
       end
       details << "\n</div>"
     end
 
-    details << "\n  </details>\n"
+    details << "\n  </details>\n\n"
     o << details
-
-    o << "</details> \n"
   end
   o
 end
@@ -128,6 +154,7 @@ end
 def output_badges(count)
   date = DateTime.now
   date_display = date.strftime "%B %e, %Y"
+  date_display = date_display.gsub ' ', '%20'
 
   b = "![](https://img.shields.io/badge/Projects-#{count}-green.svg) [![](https://img.shields.io/badge/Twitter-@opensourceios-blue.svg)](https://twitter.com/opensourceios) ![](https://img.shields.io/badge/Updated-#{date_display}-lightgrey.svg)"
   b
@@ -175,10 +202,16 @@ def output_stars(number)
   end
 end
 
-def write_readme(j)
+def write_list(j, file, appstoreonly = false)
   t    = j['title']
   subt = j['subtitle']
-  desc = j['description']
+
+  desc = if appstoreonly
+    "List of **#{app_store_total j}** open-source apps published on the App Store (complete list [here](https://github.com/dkhamsing/open-source-ios-apps))"
+  else
+    j['description']
+  end
+
   h    = j['header']
   f    = j['footer']
   cats = j['categories']
@@ -187,8 +220,11 @@ def write_readme(j)
   output = '# ' + t
   output << "\n\n"
   output << desc
-  output << "\n\n#{subt}\n\n"
-  output << output_badges(apps.count)
+
+  if appstoreonly == false
+    output << "\n\n#{subt}\n\n"
+    output << output_badges(apps.count)
+  end
 
   output << "\n\nJump to\n\n"
 
@@ -217,14 +253,14 @@ def write_readme(j)
     output << temp
 
     cat_apps = apps_for_cat(apps, c['id'])
-    output << output_apps(cat_apps)
+    output << output_apps(cat_apps, appstoreonly)
   end
 
   output << "\n"
   output << f
 
-  File.open(README, 'w') { |f| f.write output }
-  puts "wrote #{README} ✨"
+  File.open(file, 'w') { |f| f.write output }
+  puts "wrote #{file} ✨"
 end
 
 def write_archive(j)
@@ -253,5 +289,6 @@ end
 
 j = get_json
 
-write_readme(j)
+write_list(j, README)
 write_archive(j)
+write_list(j, APPSTORE, true)
